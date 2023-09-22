@@ -1,10 +1,5 @@
 package SqlPaser
 
-import (
-	"strings"
-	"unicode"
-)
-
 type Token struct {
 	Type  TokenType // 令牌类型
 	Value string    // 令牌值
@@ -103,6 +98,17 @@ const (
 	SET
 	STAR
 	VALUES
+	ASC
+	DESC
+	OFFSET
+	INTO
+	LEFT_JOIN
+	RIGHT_JOIN
+	INNER_JOIN
+	FULL_JOIN
+	TRUE
+	FALSE
+	BY
 )
 
 // 关键字映射
@@ -181,87 +187,9 @@ var keywords = map[string]TokenType{
 	// ...
 	"SET":    SET,
 	"VALUES": VALUES,
+	"ASC":    ASC,
+	"DESC":   DESC,
+	"OFFSET": OFFSET,
+	"INTO":   INTO,
+	"BY":     BY,
 }
-
-type Lexer struct {
-	input  string  // 输入字符串
-	pos    int     // 当前位置
-	tokens []Token // 已解析的令牌列表
-}
-
-func NewLexer(input string) *Lexer {
-	return &Lexer{input: input}
-}
-
-func (l *Lexer) NextToken() Token {
-	l.skipWhitespace() // 跳过空白
-
-	if l.pos >= len(l.input) {
-		return Token{EOF, ""}
-	}
-
-	switch ch := l.input[l.pos]; {
-	case unicode.IsLetter(rune(ch)):
-		return l.lexKeywordOrIdentifier()
-	case unicode.IsDigit(rune(ch)):
-		return l.lexNumber()
-	case ch == ',':
-		l.pos++
-		return Token{COMMA, ","}
-	// ... 其他字符处理
-	default:
-		l.pos++
-		return Token{EOF, string(ch)}
-	}
-}
-
-// 解析关键字或标识符
-func (l *Lexer) lexKeywordOrIdentifier() Token {
-	start := l.pos
-	for l.pos < len(l.input) && (unicode.IsLetter(rune(l.input[l.pos])) || unicode.IsDigit(rune(l.input[l.pos]))) {
-		l.pos++
-	}
-	word := strings.ToUpper(l.input[start:l.pos])
-	if keyword, ok := keywords[word]; ok {
-		return Token{keyword, word}
-	}
-	return Token{IDENTIFIER, l.input[start:l.pos]}
-}
-
-// 解析数字
-func (l *Lexer) lexNumber() Token {
-	start := l.pos
-	for l.pos < len(l.input) && unicode.IsDigit(rune(l.input[l.pos])) {
-		l.pos++
-	}
-	return Token{NUMBER, l.input[start:l.pos]}
-}
-
-// 跳过空白
-func (l *Lexer) skipWhitespace() {
-	for l.pos < len(l.input) && unicode.IsSpace(rune(l.input[l.pos])) {
-		l.pos++
-	}
-}
-
-// 向前预览字符
-func (l *Lexer) peek(dist int) byte {
-	pos := l.pos + dist
-	if pos >= len(l.input) {
-		return 0
-	}
-	return l.input[pos]
-}
-
-/*
-func main() {
-	lexer := NewLexer("SELECT column1, column2 FROM table WHERE column1=value GROUP BY column2 ORDER BY column1 LIMIT 10;")
-	for {
-		token := lexer.NextToken()
-		if token.Type == EOF {
-			break
-		}
-		fmt.Println(token)
-	}
-}
-*/

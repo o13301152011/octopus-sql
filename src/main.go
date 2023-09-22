@@ -21,6 +21,8 @@ func handlePredictionData(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	SqlPaser.TestLexer(nil)
+	SqlPaser.TestParseInsertStatement(nil)
+	SqlPaser.TestParseSelectStatement(nil)
 	nb := Engine.NewNaiveBayes()
 
 	// 训练

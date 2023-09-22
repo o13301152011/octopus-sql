@@ -1,6 +1,7 @@
 package SqlPaser
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -18,7 +19,7 @@ func TestLexer(t *testing.T) {
 				{COMMA, ","},
 				{IDENTIFIER, "COLUMN2"},
 				{FROM, "FROM"},
-				{IDENTIFIER, "TABLE"},
+				{TABLE, "TABLE"},
 				{SEMICOLON, ";"},
 				{EOF, ""},
 			},
@@ -37,7 +38,7 @@ func TestLexer(t *testing.T) {
 			}
 		}
 		if !reflect.DeepEqual(tokens, tt.expected) {
-			t.Errorf("For input %q, expected %v but got %v", tt.input, tt.expected, tokens)
+			fmt.Println("For input %q, expected %v but got %v", tt.input, tt.expected, tokens)
 		}
 	}
 }

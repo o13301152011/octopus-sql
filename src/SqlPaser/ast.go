@@ -1,8 +1,18 @@
 package SqlPaser
 
+import (
+	"fmt"
+	"strings"
+)
+
 // ASTNode 代表抽象语法树中的一个节点。
 type ASTNode interface {
 	// 这个接口可以稍后扩展，例如添加一个方法来转换节点为字符串等。
+}
+
+// AliasClause 表示别名子句。
+type AliasClause struct {
+	Alias string
 }
 
 // FromClause 代表FROM子句。
@@ -14,10 +24,10 @@ type FromClause struct {
 
 // JoinClause 代表JOIN子句。
 type JoinClause struct {
-	Type      string //例如 INNER, LEFT OUTER 等。
-	TableName string
-	Alias     string       // 可选的表别名。
-	On        *WhereClause // JOIN的ON条件。
+	Type  TokenType // 如 INNER, LEFT, RIGHT, FULL
+	Table *Identifier
+	Alias *AliasClause // 可选的表别名。
+	On    *WhereClause // JOIN的ON条件。
 }
 
 // WhereClause 代表WHERE子句。
@@ -42,8 +52,8 @@ type OrderByClause struct {
 
 // OrderByExpression 代表一个ORDER BY中的表达式。
 type OrderByExpression struct {
-	Column   ASTNode
-	Ordering string //例如 ASC 或 DESC。
+	Column    *Identifier
+	Direction TokenType // ASC 或 DESC
 }
 
 // LimitClause 代表LIMIT子句。
@@ -66,9 +76,10 @@ type SelectStatement struct {
 
 // InsertStatement 代表一个INSERT语句。
 type InsertStatement struct {
-	TableName string
-	Columns   []string    // 要插入的列名称。
-	Values    [][]ASTNode // 每个子数组代表一行的值。
+	TableName       string
+	Columns         []string    // 要插入的列名称。
+	Values          [][]ASTNode // 每个子数组代表一行的值。
+	SelectStatement *SelectStatement
 }
 
 // UpdateStatement 代表一个UPDATE语句。
@@ -123,6 +134,25 @@ type DropIndexStatement struct {
 }
 
 // ... 更多的语句结构可以根据需要添加。
+type NumberLiteral struct {
+	Value string
+}
+
+type StringLiteral struct {
+	Value string
+}
+
+type BooleanLiteral struct {
+	Value bool
+}
+
+// 表示子查询
+type Subquery struct {
+	Statement *SelectStatement
+}
+
+// 表示NULL字面量
+type NullLiteral struct{}
 
 // Identifier 代表一个标识符。
 type Identifier struct {
@@ -154,6 +184,11 @@ type ColumnName struct {
 	Name  string
 }
 
+type AliasedExpression struct {
+	Expr  ASTNode
+	Alias string
+}
+
 // FunctionCall 表示一个函数调用。
 type FunctionCall struct {
 	Name     string
@@ -171,9 +206,9 @@ type SubQuery struct {
 
 // BetweenExpr 表示BETWEEN表达式。
 type BetweenExpr struct {
-	Value ASTNode
-	From  ASTNode
-	To    ASTNode
+	Operand    ASTNode
+	LowerBound ASTNode
+	UpperBound ASTNode
 }
 
 // InExpr 表示IN表达式。
@@ -252,4 +287,121 @@ type NestedSubQuery struct {
 	Alias  string
 }
 
-// ... 其他已存在的结构和定义。
+func printAST(node ASTNode, indent int) {
+	if node == nil {
+		return
+	}
+
+	prefix := strings.Repeat("  ", indent)
+
+	switch n := node.(type) {
+	case *SelectStatement:
+		fmt.Println(prefix + "SelectStatement:")
+		if n.Distinct {
+			fmt.Println(prefix + "  Distinct: true")
+		}
+		for _, col := range n.Columns {
+			printAST(col, indent+1)
+		}
+		printAST(n.From, indent+1)
+		printAST(n.Where, indent+1)
+		printAST(n.GroupBy, indent+1)
+		printAST(n.Having, indent+1)
+		printAST(n.OrderBy, indent+1)
+		printAST(n.Limit, indent+1)
+	case *FromClause:
+		fmt.Printf("%sFromClause: %s Alias: %s\n", prefix, n.TableName, n.Alias)
+		for _, join := range n.Joins {
+			printAST(join, indent+1)
+		}
+	case *JoinClause:
+		fmt.Printf("%sJoinClause: %v\n", prefix, n.Type)
+		printAST(n.Table, indent+1)
+		if n.Alias != nil {
+			fmt.Printf("%sAlias: %s\n", prefix+"  ", n.Alias.Alias)
+		}
+		printAST(n.On, indent+1)
+	case *WhereClause:
+		fmt.Println(prefix + "WhereClause:")
+		printAST(n.Condition, indent+1)
+	case *GroupByClause:
+		fmt.Println(prefix + "GroupByClause:")
+		for _, col := range n.Columns {
+			printAST(col, indent+1)
+		}
+	case *OrderByClause:
+		fmt.Println(prefix + "OrderByClause:")
+		for _, expr := range n.Columns {
+			printAST(expr, indent+1)
+		}
+	case *OrderByExpression:
+		for s, tokenType := range keywords {
+			if tokenType == n.Direction {
+				fmt.Printf("%sOrderByExpression: %s %s\n", prefix, n.Column.Name, s)
+			}
+		}
+
+	case *LimitClause:
+		fmt.Printf("%sLimitClause: Limit: %d Offset: %d\n", prefix, n.Count, n.Offset)
+	case *Identifier:
+		fmt.Printf("%sIdentifier: %s\n", prefix, n.Name)
+	case *BinaryExpr:
+		for s, tokenType := range keywords {
+			if tokenType == n.Operator {
+				fmt.Printf("%sBinaryExpr: %s\n", prefix, s)
+			}
+		}
+		printAST(n.Left, indent+1)
+		printAST(n.Right, indent+1)
+	case *FunctionCall:
+		fmt.Printf("%sFunctionCall: %s\n", prefix, n.Name)
+		for _, arg := range n.Args {
+			printAST(arg, indent+1)
+		}
+	case *AliasedExpression:
+		fmt.Println(prefix + "AliasedExpression:")
+		printAST(n.Expr, indent+1)
+		fmt.Printf("%sAlias: %s\n", prefix, n.Alias)
+	case *NumberLiteral:
+		fmt.Printf("%sNumberLiteral: %s\n", prefix, n.Value)
+	case *StringLiteral:
+		fmt.Printf("%sStringLiteral: %s\n", prefix, n.Value)
+	case *BooleanLiteral:
+		fmt.Printf("%sBooleanLiteral: %t\n", prefix, n.Value)
+	case *NullLiteral:
+		fmt.Println(prefix + "NullLiteral")
+	case *Star:
+		fmt.Println(prefix + "Star: *")
+	case *Subquery:
+		fmt.Println(prefix + "Subquery:")
+		printAST(n.Statement, indent+1)
+	case *BetweenExpr:
+		fmt.Println(prefix + "BetweenExpr:")
+		printAST(n.Operand, indent+1)
+		printAST(n.LowerBound, indent+1)
+		printAST(n.UpperBound, indent+1)
+	case *InExpr:
+		fmt.Println(prefix + "InExpr:")
+		printAST(n.Value, indent+1)
+		for _, v := range n.Values {
+			printAST(v, indent+1)
+		}
+	case *LikeExpr:
+		fmt.Println(prefix + "LikeExpr:")
+		printAST(n.Value, indent+1)
+		printAST(n.Pattern, indent+1)
+	case *CaseExpr:
+		fmt.Println(prefix + "CaseExpr:")
+		for _, branch := range n.Branches {
+			printAST(branch, indent+1)
+		}
+		printAST(n.Default, indent+1)
+	case *CaseBranch:
+		fmt.Println(prefix + "CaseBranch:")
+		printAST(n.Condition, indent+1)
+		printAST(n.Result, indent+1)
+	// Add more nodes as needed
+	default:
+		fmt.Printf("%sUnhandled type: %T\n", prefix, n)
+	}
+}

@@ -99,27 +99,6 @@ func (p *Parser) parseDeleteStatement() *DeleteStatement {
 	return stmt
 }
 
-// ... 其他已存在的函数和逻辑。
-
-// parseSelectStatement 解析一个SELECT语句。
-func (p *Parser) parseSelectStatement() *SelectStatement {
-	stmt := &SelectStatement{}
-	// 解析是否存在 DISTINCT 关键字。
-	stmt.Distinct = p.match(DISTINCT)
-
-	// 解析列。
-	stmt.Columns = p.parseColumns()
-
-	// 如果存在，解析FROM子句。
-	if p.match(FROM) {
-		stmt.From = p.parseFromClause()
-	}
-
-	// TODO: 解析其他子句，如 WHERE, GROUP BY, HAVING, ORDER BY, LIMIT等。
-
-	return stmt
-}
-
 // parseColumns 解析列。
 func (p *Parser) parseColumns() []ASTNode {
 	var columns []ASTNode
@@ -127,8 +106,15 @@ func (p *Parser) parseColumns() []ASTNode {
 		if p.match(STAR) {
 			columns = append(columns, &Star{})
 		} else {
-			columns = append(columns, &Identifier{Name: p.expect(IDENTIFIER).Value})
+			expr := p.parseExpression() // 使用parseExpression来处理更复杂的表达式
+			if p.match(AS) {
+				alias := p.expect(IDENTIFIER).Value
+				columns = append(columns, &AliasedExpression{Expr: expr, Alias: alias})
+			} else {
+				columns = append(columns, expr)
+			}
 		}
+
 		if !p.match(COMMA) {
 			break
 		}
@@ -141,40 +127,41 @@ func (p *Parser) parseFromClause() *FromClause {
 	from := &FromClause{}
 	from.TableName = p.expect(IDENTIFIER).Value
 
-	// TODO: 解析JOINs, ALIAS等。
+	// 解析表的别名
+	if p.match(AS) {
+		p.advance() // 跳过AS
+		alias := &AliasClause{Alias: p.expect(IDENTIFIER).Value}
+		from.Alias = alias.Alias
+	} else if p.peek().Type == IDENTIFIER { // 如果没有AS，但后面是标识符，也视为别名
+		alias := &AliasClause{Alias: p.advance().Value}
+		from.Alias = alias.Alias
+	}
+
+	// 解析所有的JOIN子句
+	for p.match(INNER, LEFT, RIGHT, FULL) {
+		join := &JoinClause{}
+		join.Type = p.currentToken().Type
+		p.expect(JOIN) // 期望下一个 token 是 JOIN 关键字
+
+		join.Table = &Identifier{Name: p.expect(IDENTIFIER).Value}
+
+		// 解析JOIN的别名
+		if p.match(AS) {
+			p.advance()
+			alias := &AliasClause{Alias: p.expect(IDENTIFIER).Value}
+			join.Alias = alias
+		} else if p.peek().Type == IDENTIFIER {
+			alias := &AliasClause{Alias: p.advance().Value}
+			join.Alias = alias
+		}
+
+		if p.match(ON) {
+			join.On = p.parseWhereClause()
+		}
+		from.Joins = append(from.Joins, join)
+	}
 
 	return from
-}
-
-// parseInsertStatement 解析一个INSERT语句。
-func (p *Parser) parseInsertStatement() *InsertStatement {
-	stmt := &InsertStatement{}
-	stmt.TableName = p.expect(IDENTIFIER).Value
-
-	// 解析列名称（如果提供了）。
-	if p.match(LEFT_PAREN) {
-		for !p.match(RIGHT_PAREN) {
-			stmt.Columns = append(stmt.Columns, p.expect(IDENTIFIER).Value)
-			p.match(COMMA) // 可选的，如果还有更多的列。
-		}
-	}
-
-	p.expect(VALUES)
-
-	// 解析插入的值。
-	for p.match(LEFT_PAREN) {
-		var values []ASTNode
-		for !p.match(RIGHT_PAREN) {
-			values = append(values, p.parseExpression())
-			p.match(COMMA) // 可选的，如果还有更多的值。
-		}
-		stmt.Values = append(stmt.Values, values)
-		if !p.match(COMMA) { // 如果不再有更多的数据行。
-			break
-		}
-	}
-
-	return stmt
 }
 
 // parseUpdateStatement 解析一个UPDATE语句。
