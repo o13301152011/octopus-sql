@@ -2,6 +2,7 @@ package main
 
 import (
 	"HawkEye-Go/src/Engine"
+	"HawkEye-Go/src/PythonSqlPaser"
 	"HawkEye-Go/src/SqlPaser"
 	"fmt"
 	"net/http"
@@ -20,6 +21,7 @@ func handlePredictionData(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	PythonSqlPaser.TestSQLProcessing(nil)
 	SqlPaser.TestLexer(nil)
 	SqlPaser.TestParseInsertStatement(nil)
 	SqlPaser.TestParseSelectStatement(nil)
